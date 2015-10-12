@@ -40,13 +40,43 @@ bool ExrHandler::read(QImage *outImage)
 		Imf::RgbaInputFile file(stream);
 		Imath::Box2i dw = file.dataWindow();
 
-		unsigned int width = dw.max.x - dw.min.x + 1;
-		unsigned int height = dw.max.y - dw.min.y + 1;
+		const int dw_width = dw.max.x - dw.min.x + 1;
+		const int dw_height = dw.max.y - dw.min.y + 1;
 
-		Imf::Array2D<Imf::Rgba> pixels;
-		pixels.resizeErase(height, width);
-		file.setFrameBuffer(&pixels[0][0] - dw.min.y * width, 1, width);
-		file.readPixels (dw.min.y, dw.max.y);
+		int minx = dw.min.x;
+		int miny = dw.min.y;
+		int maxx = dw.max.x;
+		int maxy = dw.max.y;
+
+		if (clipRect.isValid()) {
+			// User coordinates are relative to the viewable space
+			// Translate the rectangle so that it's relative to the display window
+			clipRect.translate(dw.min.x, dw.min.y);
+
+			if (dw.min.x < clipRect.x() && clipRect.x() < dw.max.x)
+				minx = clipRect.x();
+			if (dw.min.y < clipRect.y() && clipRect.y() < dw.max.y)
+				miny = clipRect.y();
+
+			if (clipRect.right() < dw.max.x)
+				maxx = clipRect.right();
+			if (clipRect.bottom() < dw.max.y)
+				maxy = clipRect.bottom();
+		}
+
+		const unsigned int width = maxx - minx + 1;
+		const unsigned int height = maxy - miny + 1;
+
+		/*
+		 * Contrary to the documentation, you can't offset by minx because
+		 * readPixels reads in the whole scanline.
+		 * Thus doing &pixels[0][0] - minx means that readPixels will read from the
+		 * the start of the scanline into the memory before &pixels.
+		 */
+		Imf::Array2D<Imf::Rgba> pixels(height, dw_width);
+		file.setFrameBuffer(&pixels[0][0] - miny * dw_width, 1, dw_width);
+
+		file.readPixels(miny, maxy);
 
 		QImage image(width, height, QImage::Format_RGB32);
 		if (image.isNull()) {
@@ -55,7 +85,8 @@ bool ExrHandler::read(QImage *outImage)
 
 		for (unsigned int y = 0; y < height; y++) {
 			for (unsigned int x = 0; x < width; x++) {
-				image.setPixel(x, y, halfRgbaToQRgba(pixels[y][x+dw.min.x]));
+				// We could offset by miny above, but not by minx
+				image.setPixel(x, y, halfRgbaToQRgba(pixels[y][x+minx]));
 			}
 		}
 
@@ -88,7 +119,7 @@ bool ExrHandler::canRead(QIODevice *device)
 
 bool ExrHandler::supportsOption(ImageOption option) const
 {
-	return (option == Size || option == Gamma);
+	return (option == Size || option == ClipRect || option == Gamma);
 }
 
 QVariant ExrHandler::option(ImageOption option) const
@@ -110,6 +141,9 @@ QVariant ExrHandler::option(ImageOption option) const
 			}
 		}
 	}
+	else if (option == ClipRect) {
+		return clipRect;
+	}
 	else if (option == Gamma) {
 		return gamma;
 	}
@@ -119,7 +153,12 @@ QVariant ExrHandler::option(ImageOption option) const
 
 void ExrHandler::setOption(ImageOption option, const QVariant &value)
 {
-	if (option == Gamma) {
+	if (option == ClipRect) {
+		if (value.canConvert(QVariant::Rect)) {
+			clipRect = value.toRect();
+		}
+	}
+	else if (option == Gamma) {
 		bool ok = true;
 		float newGamma = value.toFloat(&ok);
 		if (ok) {
