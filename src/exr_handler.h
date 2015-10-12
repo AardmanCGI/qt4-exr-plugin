@@ -22,6 +22,7 @@ class ExrHandler : public QImageIOHandler
 
 		bool supportsOption(ImageOption option) const;
 		QVariant option(ImageOption option) const;
+		void setOption(ImageOption option, const QVariant &value);
 
 		QRgb halfRgbaToQRgba(struct Imf::Rgba imagepixel);
 
