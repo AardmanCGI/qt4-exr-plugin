@@ -88,7 +88,7 @@ bool ExrHandler::canRead(QIODevice *device)
 
 bool ExrHandler::supportsOption(ImageOption option) const
 {
-	return option == Size;
+	return (option == Size || option == Gamma);
 }
 
 QVariant ExrHandler::option(ImageOption option) const
@@ -110,8 +110,22 @@ QVariant ExrHandler::option(ImageOption option) const
 			}
 		}
 	}
+	else if (option == Gamma) {
+		return gamma;
+	}
 
 	return QVariant();
+}
+
+void ExrHandler::setOption(ImageOption option, const QVariant &value)
+{
+	if (option == Gamma) {
+		bool ok = true;
+		float newGamma = value.toFloat(&ok);
+		if (ok) {
+			gamma = newGamma;
+		}
+	}
 }
 
 inline float ExrHandler::knee(double x, double f)
