@@ -7,6 +7,7 @@
 #include <QImage>
 #include <QImageIOHandler>
 #include <QIODevice>
+#include <QRect>
 
 class ExrHandler : public QImageIOHandler
 {
@@ -27,6 +28,8 @@ class ExrHandler : public QImageIOHandler
 		QRgb halfRgbaToQRgba(struct Imf::Rgba imagepixel);
 
 	private:
+		QRect clipRect;
+
 		float f;
 		float gamma;
 		float kl;
